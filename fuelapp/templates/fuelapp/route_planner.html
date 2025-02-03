@@ -2,10 +2,9 @@
 <html>
 <head>
     <title>Fuel Route Planner</title>
+    <!-- Add Leaflet CSS and JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css" />
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -18,122 +17,76 @@
             gap: 20px;
         }
         .form-container {
-            flex: 0 0 300px;
+            flex: 1;
         }
         .result-container {
-            flex: 1;
-            display: flex;
-            gap: 20px;
+            flex: 2;
         }
         #map {
-            height: 600px;
+            height: 400px;
             width: 100%;
+            margin-bottom: 20px;
             border: 1px solid #ddd;
             border-radius: 4px;
         }
-        /* Keep existing styles, add these new ones */
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="text"] {
             width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            z-index: 9999;
-            display: none;
-            justify-content: center;
-            align-items: center;
+            padding: 8px;
+            margin-bottom: 10px;
         }
-        .virtual-scroll {
-            overflow-y: auto;
-            max-height: 600px;
-        }
-        .virtual-scroll-item {
-            position: absolute;
-            width: 100%;
-            will-change: transform;
-        }
-        .route-summary {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-            border: 1px solid #dee2e6;
-        }
-        .route-summary h3 {
-            margin-top: 0;
-            color: #333;
-        }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-            border: 1px solid #f5c6cb;
-        }
-        .custom-div-icon {
-            background: none;
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
             border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
         }
         #result {
-            display: none;
             margin-top: 20px;
-        }
-        .spinner {
-            padding: 20px;
-            background: white;
+            padding: 15px;
+            border: 1px solid #ddd;
             border-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: none;
         }
-        .fuel-station-icon {
-            background: none;
-            border: none;
-        }
-        
-        .marker-cluster-small {
-            background-color: rgba(181, 226, 140, 0.6);
-        }
-        
-        .marker-cluster-small div {
-            background-color: rgba(110, 204, 57, 0.6);
-        }
-        
-        .marker-cluster-medium {
-            background-color: rgba(241, 211, 87, 0.6);
-        }
-        
-        .marker-cluster-medium div {
-            background-color: rgba(240, 194, 12, 0.6);
-        }
-        
-        .marker-cluster-large {
-            background-color: rgba(253, 156, 115, 0.6);
-        }
-        
-        .marker-cluster-large div {
-            background-color: rgba(241, 128, 23, 0.6);
-        }
-        .nearby-stations {
-            margin: 10px 0;
-            padding: 10px;
-            background: #f8f9fa;
+        .stop-card {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
             border-radius: 4px;
+            background-color: #f9f9f9;
         }
-
-        .station-item {
-            padding: 10px;
-            border-bottom: 1px solid #dee2e6;
+        .route-summary {
+            background-color: #e9e9e9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
         }
-
-        .station-item:last-child {
-            border-bottom: none;
+        .error {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
         }
-
-        .distance {
-            color: #666;
-            font-size: 0.9em;
-            margin-left: 10px;
+        .warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -157,127 +110,50 @@
         </div>
     </div>
 
-    <div class="loading-overlay" id="loading">
-        <div class="spinner">Loading...</div>
-    </div>
-
     <script>
         let map;
         let markers = [];
         let routeLine;
-        
+
+        // Initialize map
         function initMap() {
-            map = L.map('map').setView([39.8283, -98.5795], 4); // Center on US
+            map = L.map('map').setView([39.8283, -98.5795], 4); // Center of USA
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
-            
-            // Create a marker cluster group
-            const markerCluster = L.markerClusterGroup({
-                maxClusterRadius: 50,
-                spiderfyOnMaxZoom: true,
-                showCoverageOnHover: false,
-                zoomToBoundsOnClick: true
-            });
 
             // Load and display all fuel stations
             fetch('/api/fuel-stations/')
                 .then(response => response.json())
-                .then(data => {
-                    console.log(`Loading ${data.total_stations} stations...`);
-                    const stations = data.stations;
-                    
-                    // Create markers in batches
-                    const batchSize = 100;
-                    let currentIndex = 0;
-
-                    function createBatch() {
-                        const endIndex = Math.min(currentIndex + batchSize, stations.length);
-                        const batch = stations.slice(currentIndex, endIndex);
-                        
-                        batch.forEach(station => {
-                            if (station.latitude && station.longitude) {
-                                const marker = L.marker([station.latitude, station.longitude], {
-                                    title: station.truck_stop,
-                                    icon: L.divIcon({
-                                        className: 'fuel-station-icon',
-                                        html: `<div style="background-color: ${getPriceColor(station.retail_price)}; 
-                                              width: 8px; height: 8px; border-radius: 50%;"></div>`
-                                    })
-                                });
-                                
-                                marker.bindPopup(`
-                                    <strong>${station.truck_stop}</strong><br>
-                                    ${station.address}<br>
-                                    ${station.city}, ${station.state}<br>
-                                    <strong>Price: $${parseFloat(station.retail_price).toFixed(3)}/gallon</strong>
-                                `);
-                                
-                                markerCluster.addLayer(marker);
-                            }
-                        });
-
-                        currentIndex = endIndex;
-                        
-                        if (currentIndex < stations.length) {
-                            // Schedule next batch
-                            setTimeout(createBatch, 10);
-                        } else {
-                            // All markers created, add to map
-                            map.addLayer(markerCluster);
-                            console.log('All stations loaded');
+                .then(stations => {
+                    console.log('Loaded stations:', stations.length); // Debug output
+                    stations.forEach(station => {
+                        if (station.latitude && station.longitude) {
+                            const marker = L.marker([station.latitude, station.longitude], {
+                                title: station.truck_stop,
+                                icon: L.divIcon({
+                                    className: 'fuel-station-icon',
+                                    html: `<div style="background-color: gray; width: 8px; height: 8px; border-radius: 50%;"></div>`
+                                })
+                            }).addTo(map);
+                            
+                            marker.bindPopup(`
+                                <strong>${station.truck_stop}</strong><br>
+                                ${station.address}, ${station.city}, ${station.state}<br>
+                                Price: $${parseFloat(station.retail_price).toFixed(3)}/gallon
+                            `);
                         }
-                    }
-
-                    // Start creating markers
-                    createBatch();
-                    
-                    // Create price legend
-                    const legend = L.control({ position: 'bottomright' });
-                    legend.onAdd = function(map) {
-                        const div = L.DomUtil.create('div', 'info legend');
-                        div.style.backgroundColor = 'white';
-                        div.style.padding = '10px';
-                        div.style.borderRadius = '5px';
-                        div.style.border = '1px solid #ccc';
-                        
-                        div.innerHTML = `
-                            <h4 style="margin:0 0 5px 0">Fuel Prices</h4>
-                            <div style="margin-bottom:3px">
-                                <span style="display:inline-block;width:10px;height:10px;background:#4CAF50;border-radius:50%"></span>
-                                Low (< $3.10)
-                            </div>
-                            <div style="margin-bottom:3px">
-                                <span style="display:inline-block;width:10px;height:10px;background:#FFC107;border-radius:50%"></span>
-                                Medium ($3.10 - $3.30)
-                            </div>
-                            <div>
-                                <span style="display:inline-block;width:10px;height:10px;background:#F44336;border-radius:50%"></span>
-                                High (> $3.30)
-                            </div>
-                        `;
-                        return div;
-                    };
-                    legend.addTo(map);
+                    });
                 })
                 .catch(error => {
-                    console.error('Error loading stations:', error);
+                    console.error('Error loading fuel stations:', error);
                 });
         }
 
-        function getPriceColor(price) {
-            price = parseFloat(price);
-            if (price < 3.1) return '#4CAF50';  // Green for lowest prices
-            if (price < 3.3) return '#FFC107';  // Yellow for medium prices
-            return '#F44336';  // Red for highest prices
-        }
-
+        // Clear existing markers and route
         function clearMap() {
-            // Clear existing markers
             markers.forEach(marker => map.removeLayer(marker));
             markers = [];
-            
-            // Clear existing route
             if (routeLine) {
                 map.removeLayer(routeLine);
             }
@@ -291,11 +167,6 @@
                 alert('Please enter both start and end locations');
                 return;
             }
-
-            // Show loading state
-            document.getElementById('loading').style.display = 'flex';
-            const resultDiv = document.getElementById('result');
-            resultDiv.style.display = 'none';
 
             fetch('/api/route/', {
                 method: 'POST',
@@ -315,21 +186,77 @@
                 return response.json();
             })
             .then(data => {
-                if (!data.start_coords || !data.end_coords) {
-                    throw new Error('Invalid response data');
-                }
+                const resultDiv = document.getElementById('result');
+                resultDiv.style.display = 'block';
                 
-                // Clear previous route and markers
+                // Clear existing markers
                 clearMap();
                 
-                resultDiv.style.display = 'block';
+                if (data.error) {
+                    // Show error but still display the route if coordinates are available
+                    let html = `<div class="error">${data.error}</div>`;
+                    
+                    if (data.start_coords && data.end_coords) {
+                        html += `
+                            <div class="route-summary">
+                                <h2>Route Details</h2>
+                                <p><strong>Total Distance:</strong> ${Math.round(parseFloat(data.total_distance || 0))} miles</p>
+                                <p class="warning">This route exceeds the maximum travel distance without refueling.</p>
+                            </div>
+                        `;
+                        
+                        // Add start marker
+                        const startMarker = L.marker([data.start_coords[0], data.start_coords[1]], {
+                            title: 'Start',
+                            icon: L.divIcon({
+                                className: 'custom-div-icon',
+                                html: '<div style="background-color: green; width: 10px; height: 10px; border-radius: 50%;"></div>'
+                            })
+                        }).addTo(map);
+                        markers.push(startMarker);
+
+                        // Add end marker
+                        const endMarker = L.marker([data.end_coords[0], data.end_coords[1]], {
+                            title: 'End',
+                            icon: L.divIcon({
+                                className: 'custom-div-icon',
+                                html: '<div style="background-color: red; width: 10px; height: 10px; border-radius: 50%;"></div>'
+                            })
+                        }).addTo(map);
+                        markers.push(endMarker);
+
+                        // Draw the route
+                        drawRoute(data);
+                        
+                        // Fit bounds to show entire route
+                        const bounds = L.latLngBounds([
+                            [data.start_coords[0], data.start_coords[1]],
+                            [data.end_coords[0], data.end_coords[1]]
+                        ]);
+                        map.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                    
+                    resultDiv.innerHTML = html;
+                    return;
+                }
+                
+                let html = `
+                    <div class="route-summary">
+                        <h2>Route Details</h2>
+                        <p><strong>From:</strong> ${data.start_location || 'N/A'}</p>
+                        <p><strong>To:</strong> ${data.end_location || 'N/A'}</p>
+                        <p><strong>Total Distance:</strong> ${Math.round(parseFloat(data.total_distance || 0))} miles</p>
+                        <p><strong>Total Fuel Needed:</strong> ${parseFloat(data.total_fuel_needed || 0).toFixed(2)} gallons</p>
+                        <p><strong>Total Fuel Cost:</strong> $${parseFloat(data.total_cost || 0).toFixed(2)}</p>
+                    </div>
+                `;
 
                 // Add start marker
                 const startMarker = L.marker([data.start_coords[0], data.start_coords[1]], {
                     title: 'Start',
                     icon: L.divIcon({
                         className: 'custom-div-icon',
-                        html: '<div style="background-color: green; width: 12px; height: 12px; border-radius: 50%;"></div>'
+                        html: '<div style="background-color: green; width: 10px; height: 10px; border-radius: 50%;"></div>'
                     })
                 }).addTo(map);
                 markers.push(startMarker);
@@ -339,97 +266,80 @@
                     title: 'End',
                     icon: L.divIcon({
                         className: 'custom-div-icon',
-                        html: '<div style="background-color: red; width: 12px; height: 12px; border-radius: 50%;"></div>'
+                        html: '<div style="background-color: red; width: 10px; height: 10px; border-radius: 50%;"></div>'
                     })
                 }).addTo(map);
                 markers.push(endMarker);
 
-                // Draw the route
-                if (data.route_geometry) {
-                    routeLine = L.geoJSON(data.route_geometry, {
-                        style: {
-                            color: '#0066ff',
-                            weight: 4,
-                            opacity: 0.7
-                        }
-                    }).addTo(map);
-                }
-
-                // Add fuel stop markers
                 if (data.fuel_stops && data.fuel_stops.length > 0) {
-                    data.fuel_stops.forEach((stop, index) => {
-                        const station = stop.fuel_station;
-                        const marker = L.marker([station.latitude, station.longitude], {
-                            title: `Stop ${index + 1}`,
-                            icon: L.divIcon({
-                                className: 'custom-div-icon',
-                                html: '<div style="background-color: blue; width: 10px; height: 10px; border-radius: 50%;"></div>'
-                            })
-                        }).addTo(map);
-                        markers.push(marker);
+                    html += '<h3>Recommended Fuel Stops:</h3>';
+                    data.fuel_stops.forEach(stop => {
+                        html += `
+                            <div class="stop-card">
+                                <h4>Stop ${stop.stop_number}: ${stop.fuel_station.truck_stop}</h4>
+                                <p><strong>Address:</strong> ${stop.fuel_station.address}, ${stop.fuel_station.city}, ${stop.fuel_station.state}</p>
+                                <p><strong>Distance from start:</strong> ${Math.round(parseFloat(stop.distance_from_start))} miles</p>
+                                <p><strong>Fuel amount:</strong> ${parseFloat(stop.fuel_amount).toFixed(2)} gallons</p>
+                                <p><strong>Fuel cost:</strong> $${parseFloat(stop.cost).toFixed(2)}</p>
+                                <p><strong>Price per gallon:</strong> $${parseFloat(stop.fuel_station.retail_price).toFixed(3)}</p>
+                            </div>
+                        `;
+
+                        // Add fuel stop marker
+                        if (stop.fuel_station.latitude && stop.fuel_station.longitude) {
+                            const stopMarker = L.marker([stop.fuel_station.latitude, stop.fuel_station.longitude], {
+                                title: `Stop ${stop.stop_number}`,
+                                icon: L.divIcon({
+                                    className: 'custom-div-icon',
+                                    html: '<div style="background-color: blue; width: 10px; height: 10px; border-radius: 50%;"></div>'
+                                })
+                            }).addTo(map);
+                            markers.push(stopMarker);
+                        }
                     });
+                } else {
+                    html += '<p>No fuel stops needed for this route.</p>';
                 }
 
-                // Fit map bounds to show entire route
+                resultDiv.innerHTML = html;
+
+                // Draw the route
+                drawRoute(data);
+                
+                // Fit bounds to show entire route
                 const bounds = L.latLngBounds([
                     [data.start_coords[0], data.start_coords[1]],
                     [data.end_coords[0], data.end_coords[1]]
                 ]);
+                data.fuel_stops.forEach(stop => {
+                    bounds.extend([stop.fuel_station.latitude, stop.fuel_station.longitude]);
+                });
                 map.fitBounds(bounds, { padding: [50, 50] });
-
-                // Display route information
-                resultDiv.innerHTML = `
-                    <div class="route-summary">
-                        <h3>Route Summary</h3>
-                        <p><strong>From:</strong> ${data.start_location}</p>
-                        <p><strong>To:</strong> ${data.end_location}</p>
-                        <p><strong>Total Distance:</strong> ${Math.round(data.total_distance)} miles</p>
-                        <p><strong>Total Fuel Needed:</strong> ${data.total_fuel_needed.toFixed(2)} gallons</p>
-                        <p><strong>Total Cost:</strong> $${data.total_cost.toFixed(2)}</p>
-                        
-                        <h4>Recommended Stations Near Start Location</h4>
-                        <div class="nearby-stations">
-                            ${data.nearby_stations.start.map(station => `
-                                <div class="station-item">
-                                    <strong>${station.truck_stop}</strong><br>
-                                    ${station.address}, ${station.city}, ${station.state}<br>
-                                    <strong class="price ${getPriceClass(station.retail_price)}">
-                                        $${station.retail_price.toFixed(3)}/gallon
-                                    </strong>
-                                    <span class="distance">(${station.distance} miles away)</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <h4>Recommended Stations Near Destination</h4>
-                        <div class="nearby-stations">
-                            ${data.nearby_stations.end.map(station => `
-                                <div class="station-item">
-                                    <strong>${station.truck_stop}</strong><br>
-                                    ${station.address}, ${station.city}, ${station.state}<br>
-                                    <strong class="price ${getPriceClass(station.retail_price)}">
-                                        $${station.retail_price.toFixed(3)}/gallon
-                                    </strong>
-                                    <span class="distance">(${station.distance} miles away)</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-
-                // Hide loading state
-                document.getElementById('loading').style.display = 'none';
             })
             .catch(error => {
                 console.error('Error:', error);
-                document.getElementById('loading').style.display = 'none';
+                const resultDiv = document.getElementById('result');
                 resultDiv.style.display = 'block';
-                resultDiv.innerHTML = `
-                    <div class="error">
-                        ${error.error || 'Could not calculate route. Please try different locations.'}
-                    </div>
-                `;
+                resultDiv.innerHTML = `<div class="error">Error: ${error.error || 'Could not calculate route. Please try again.'}</div>`;
             });
+        }
+
+        function drawRoute(data) {
+            // Clear existing route
+            if (routeLine) {
+                map.removeLayer(routeLine);
+            }
+            
+            // Draw the actual route using GeoJSON
+            if (data.route_geometry) {
+                routeLine = L.geoJSON(data.route_geometry, {
+                    style: {
+                        color: 'blue',
+                        weight: 3,
+                        opacity: 0.7
+                    }
+                }).addTo(map);
+            }
         }
 
         function getCookie(name) {
@@ -447,13 +357,7 @@
             return cookieValue;
         }
 
-        function getPriceClass(price) {
-            price = parseFloat(price);
-            if (price < 3.1) return 'low-price';
-            if (price < 3.3) return 'medium-price';
-            return 'high-price';
-        }
-
+        // Initialize map when page loads
         window.onload = initMap;
     </script>
 </body>
