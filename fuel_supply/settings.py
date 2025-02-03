@@ -135,10 +135,26 @@ CORS_ALLOW_ALL_ORIGINS = True  # For development only, configure properly for pr
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
-    ]
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 100,
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    )
 }
 
 GEOCODING_RETRIES = 3
 OSRM_ENDPOINT = "http://router.project-osrm.org"
 MAX_FUEL_RANGE = 500  # miles
 FUEL_ECONOMY = 10  # mpg
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'TIMEOUT': 86400,  # 24 hours
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000
+        }
+    }
+}

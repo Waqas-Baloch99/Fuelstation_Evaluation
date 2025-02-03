@@ -17,6 +17,13 @@ class FuelStation(models.Model):
     def __str__(self):
         return f"{self.truck_stop} - {self.city}, {self.state}"
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['latitude', 'longitude']),
+            models.Index(fields=['retail_price']),
+            models.Index(fields=['state']),
+        ]
+
 class Route(models.Model):
     start_location = models.CharField(max_length=255)
     end_location = models.CharField(max_length=255)
