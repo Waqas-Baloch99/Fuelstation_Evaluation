@@ -140,5 +140,9 @@ REST_FRAMEWORK = {
 
 GEOCODING_RETRIES = 3
 OSRM_ENDPOINT = "http://router.project-osrm.org"
-MAX_FUEL_RANGE = 500  # miles
-FUEL_ECONOMY = 10  # mpg
+MAX_FUEL_RANGE = 500  # Maximum miles between stops
+FUEL_ECONOMY = 10     # Miles per gallon
+
+# Add these settings
+MAPBOX_ACCESS_TOKEN = ''  # Leave empty for now since we're using OpenStreetMap
+MAPS_API_KEY = ''  # Optional, for future use
