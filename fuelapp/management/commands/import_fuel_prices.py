@@ -91,8 +91,11 @@ class Command(BaseCommand):
             self.stdout.write(f"Reading CSV file from: {csv_file}")
             df = pd.read_csv(csv_file)
             
+            # Randomly sample 1000 stations
+            df = df.sample(n=min(8000, len(df)), random_state=42)
+            
             # Print import statistics
-            self.stdout.write(f"Total rows in CSV: {len(df)}")
+            self.stdout.write(f"Total rows to import: {len(df)}")
             for state in df['State'].unique():
                 count = len(df[df['State'] == state])
                 self.stdout.write(f"Stations in {state}: {count}")

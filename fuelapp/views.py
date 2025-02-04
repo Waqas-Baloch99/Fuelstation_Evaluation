@@ -38,7 +38,7 @@ class RoutePlannerTemplateView(TemplateView):
 class FuelStationPagination(PageNumberPagination):
     page_size = 100
     page_size_query_param = 'page_size'
-    max_page_size = 1000
+    max_page_size = 8000
 
 class RoutePlannerView(APIView):
     def cached_geocode(self, location):
@@ -221,7 +221,7 @@ def fuel_stations(request):
         ).values(
             'id', 'truck_stop', 'address', 'city', 
             'state', 'retail_price', 'latitude', 'longitude'
-        ).order_by('retail_price')[:1000]
+        ).order_by('retail_price')
 
         data = [{
             **station,
