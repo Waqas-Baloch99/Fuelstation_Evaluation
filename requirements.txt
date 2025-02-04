@@ -1,0 +1,20 @@
+# Core
+Django==3.2.23
+
+# REST Framework
+djangorestframework==3.14.0
+
+# CORS Headers
+django-cors-headers==4.2.0
+
+# Database (SQLite is default; add PostgreSQL if needed)
+psycopg2-binary==2.9.9  # Optional for PostgreSQL
+
+# Image handling (if you use ImageField in models)
+Pillow==10.1.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# API Documentation (optional)
+drf-yasg==1.21.7  # If you want Swagger/OpenAPI docs
