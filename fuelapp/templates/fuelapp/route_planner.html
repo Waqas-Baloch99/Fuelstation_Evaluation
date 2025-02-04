@@ -127,7 +127,6 @@
         let markerCluster;
         let currentStationMarkers = [];
 
-        // Custom icons
         const truckIcon = L.icon({
             iconUrl: "{% static 'fuelapp/images/truck.svg' %}",
             iconSize: [36, 36],
@@ -162,7 +161,6 @@
                 maxZoom: 19
             }).addTo(map);
 
-            // Initialize marker cluster group
             markerCluster = L.markerClusterGroup({
                 maxClusterRadius: 50,
                 spiderfyOnMaxZoom: true,
@@ -193,12 +191,10 @@
                         icon: stationIcon
                     });
 
-                    // Calculate distance from route if not provided
                     let distanceText = '';
                     if (station.route_distance !== undefined && station.route_distance !== null) {
                         distanceText = `${station.route_distance.toFixed(1)} miles from route`;
                     } else {
-                        // Fixed distance calculation using proper L.latLng objects
                         const routeCenter = routeLayer.getBounds().getCenter();
                         const stationLatLng = L.latLng(station.latitude, station.longitude);
                         const distance = routeCenter.distanceTo(stationLatLng);
@@ -218,7 +214,6 @@
                     markerCluster.addLayer(marker);
                 });
 
-                // Make sure the marker cluster is added to the map
                 if (!map.hasLayer(markerCluster)) {
                     map.addLayer(markerCluster);
                 }
@@ -263,13 +258,11 @@
                     throw new Error(data.error || 'Route calculation failed');
                 }
 
-                // Clear previous route and markers
                 if (routeLayer) map.removeLayer(routeLayer);
                 if (startMarker) map.removeLayer(startMarker);
                 if (endMarker) map.removeLayer(endMarker);
                 clearStationMarkers();
 
-                // Add markers
                 startMarker = L.marker(data.start_coords, {
                     icon: truckIcon
                 }).bindPopup(`Start: ${data.start_location}`).addTo(map);
@@ -278,12 +271,10 @@
                     icon: truckIcon
                 }).bindPopup(`End: ${data.end_location}`).addTo(map);
 
-                // Draw route
                 routeLayer = L.geoJSON(data.route_geometry, {
                     style: {color: '#4CAF50', weight: 4}
                 }).addTo(map);
 
-                // Update info panels
                 document.getElementById('route-info').innerHTML = `
                     <h3>Route Information</h3>
                     <p><strong>Distance:</strong> ${Math.round(data.total_distance)} miles</p>
@@ -296,23 +287,20 @@
                     <p><strong>Estimated Total Cost:</strong> $${data.total_cost.toFixed(2)}</p>
                 `;
 
-                // After route is drawn, load stations along route
                 const routeBounds = routeLayer.getBounds();
                 await loadRouteStations({
                     north: routeBounds.getNorth(),
                     south: routeBounds.getSouth(),
                     east: routeBounds.getEast(),
                     west: routeBounds.getWest(),
-                    buffer: 10 // 10 mile buffer around route
+                    buffer: 10
                 });
 
-                // Update station info with route-specific details
                 document.getElementById('station-info').innerHTML = `
                     <h3>Stations Along Route</h3>
                     ${renderStationList(data.stations)}
                 `;
 
-                // Fit map to show route
                 const bounds = routeLayer.getBounds();
                 map.fitBounds(bounds.pad(0.1));
 
@@ -367,15 +355,6 @@
         }
 
         window.onload = initMap;
-    </script>
-    <script id="station-popup-template" type="text/x-handlebars-template">
-        <p>Distance from route: ${station.route_distance.toFixed(1)} miles</p>
-    </script>
-
-    <script id="station-list-template" type="text/x-handlebars-template">
-        <div class="station-details">
-            <span class="distance">${station.route_distance.toFixed(1)} miles from route</span>
-        </div>
     </script>
 </body>
 </html>

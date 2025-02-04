@@ -1,4 +1,3 @@
-# views.py
 from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -243,18 +242,55 @@ def fuel_stations(request):
         stations = FuelStation.objects.filter(
             latitude__isnull=False,
             longitude__isnull=False,
-            retail_price__isnull=False
+            retail_price__isnull=False,
+            city__isnull=False,
+            state__isnull=False
         ).values(
             'id', 'truck_stop', 'address', 'city', 
             'state', 'retail_price', 'latitude', 'longitude'
         ).order_by('retail_price')
 
-        data = [{
-            **station,
-            'retail_price': float(station['retail_price']),
-            'latitude': float(station['latitude']),
-            'longitude': float(station['longitude'])
-        } for station in stations]
+        def get_location_coordinates(station):
+            cache_key = f"station_location_{station['city']}_{station['state']}"
+            cached_coords = cache.get(cache_key)
+            
+            if cached_coords:
+                return cached_coords
+
+            try:
+                if station['latitude'] and station['longitude']:
+                    coords = {
+                        'latitude': float(station['latitude']),
+                        'longitude': float(station['longitude'])
+                    }
+                else:
+                    address = f"{station['address']}, {station['city']}, {station['state']}, USA"
+                    geolocator = Nominatim(user_agent="fuel_planner")
+                    location = geolocator.geocode(address)
+                    if location:
+                        coords = {
+                            'latitude': location.latitude,
+                            'longitude': location.longitude
+                        }
+                    else:
+                        return None
+                
+                cache.set(cache_key, coords, CACHE_TIMEOUT)
+                return coords
+            except Exception as e:
+                logger.error(f"Geocoding error for {station['city']}, {station['state']}: {str(e)}")
+                return None
+
+        data = []
+        for station in stations:
+            coords = get_location_coordinates(station)
+            if coords:
+                data.append({
+                    **station,
+                    'retail_price': float(station['retail_price']),
+                    'latitude': coords['latitude'],
+                    'longitude': coords['longitude']
+                })
 
         cache.set(cache_key, data, CACHE_TIMEOUT)
         return Response(data)
