@@ -120,7 +120,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     <script>
-        
         let map;
         let routeLayer;
         let startMarker;
@@ -162,7 +161,7 @@
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 19
             }).addTo(map);
-            
+
             // Initialize marker cluster group
             markerCluster = L.markerClusterGroup({
                 maxClusterRadius: 50,
@@ -178,7 +177,7 @@
             try {
                 const response = await fetch(`/api/fuel-stations/?bounds=${JSON.stringify(routeBounds)}`);
                 const stations = await response.json();
-                
+
                 if (!stations || stations.length === 0) {
                     console.log('No stations found');
                     return;
@@ -193,16 +192,28 @@
                     const marker = L.marker([station.latitude, station.longitude], {
                         icon: stationIcon
                     });
-                    
+
+                    // Calculate distance from route if not provided
+                    let distanceText = '';
+                    if (station.route_distance !== undefined && station.route_distance !== null) {
+                        distanceText = `${station.route_distance.toFixed(1)} miles from route`;
+                    } else {
+                        // Fixed distance calculation using proper L.latLng objects
+                        const routeCenter = routeLayer.getBounds().getCenter();
+                        const stationLatLng = L.latLng(station.latitude, station.longitude);
+                        const distance = routeCenter.distanceTo(stationLatLng);
+                        distanceText = `${(distance / 1609.34).toFixed(1)} miles from route`;
+                    }
+
                     marker.bindPopup(`
                         <div class="station-popup">
                             <h3>${station.truck_stop}</h3>
                             <p>${station.address}<br>${station.city}, ${station.state}</p>
                             <p class="price">$${station.retail_price.toFixed(3)}/gallon</p>
-                            <p>Distance from route: ${station.route_distance?.toFixed(1) || 'N/A'} miles</p>
+                            <p>${distanceText}</p>
                         </div>
                     `);
-                    
+
                     currentStationMarkers.push(marker);
                     markerCluster.addLayer(marker);
                 });
@@ -228,7 +239,7 @@
         async function calculateRoute() {
             const startInput = document.getElementById('start').value;
             const endInput = document.getElementById('end').value;
-            
+
             if (!startInput || !endInput) {
                 alert('Please enter both locations');
                 return;
@@ -262,7 +273,7 @@
                 startMarker = L.marker(data.start_coords, {
                     icon: truckIcon
                 }).bindPopup(`Start: ${data.start_location}`).addTo(map);
-                
+
                 endMarker = L.marker(data.end_coords, {
                     icon: truckIcon
                 }).bindPopup(`End: ${data.end_location}`).addTo(map);
@@ -356,6 +367,15 @@
         }
 
         window.onload = initMap;
+    </script>
+    <script id="station-popup-template" type="text/x-handlebars-template">
+        <p>Distance from route: ${station.route_distance.toFixed(1)} miles</p>
+    </script>
+
+    <script id="station-list-template" type="text/x-handlebars-template">
+        <div class="station-details">
+            <span class="distance">${station.route_distance.toFixed(1)} miles from route</span>
+        </div>
     </script>
 </body>
 </html>

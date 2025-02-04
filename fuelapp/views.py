@@ -23,7 +23,8 @@ from django.utils.decorators import method_decorator
 from concurrent.futures import ThreadPoolExecutor
 from django.core.cache import cache
 from django.contrib.sessions.backends.base import UpdateError
-from datetime import datetime
+from shapely.geometry import LineString, Point
+from geopy.distance import geodesic
 
 logger = logging.getLogger(__name__)
 CACHE_TIMEOUT = 86400  # 24 hours
@@ -63,14 +64,32 @@ class RoutePlannerView(APIView):
         if cached_route:
             return cached_route
         
-        osrm_url = f"{settings.OSRM_ENDPOINT}/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
-        response = requests.get(osrm_url, timeout=10)
-        route_data = response.json()
-        
-        if response.status_code == 200 and route_data.get('code') == 'Ok':
-            cache.set(cache_key, route_data, CACHE_TIMEOUT)
+        try:
+            osrm_url = f"{settings.OSRM_ENDPOINT}/route/v1/driving/{start_lon},{start_lat};{end_lon},{end_lat}?overview=full&geometries=geojson"
+            response = requests.get(osrm_url, timeout=10)
+            route_data = response.json()
             
-        return route_data
+            if response.status_code != 200:
+                logger.error(f"OSRM API error: Status {response.status_code}")
+                return None
+                
+            if route_data.get('code') != 'Ok':
+                logger.error(f"OSRM route error: {route_data.get('message', 'Unknown error')}")
+                return None
+            
+            if not route_data.get('routes') or not route_data['routes'][0].get('geometry'):
+                logger.error("OSRM response missing route geometry")
+                return None
+                
+            cache.set(cache_key, route_data, CACHE_TIMEOUT)
+            return route_data
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"OSRM request failed: {str(e)}")
+            return None
+        except ValueError as e:
+            logger.error(f"Invalid OSRM response: {str(e)}")
+            return None
 
     def find_nearest_stations(self, lat, lon, radius=100, limit=10):  # Increased radius and limit
         try:
@@ -101,12 +120,14 @@ class RoutePlannerView(APIView):
                 'retail_price': float(station.retail_price),
                 'latitude': float(station.latitude),
                 'longitude': float(station.longitude),
-                'distance': round(float(station.distance), 1)
+                'route_distance': round(float(station.distance), 1) if hasattr(station, 'distance') else None
             } for station in stations]
 
         except Exception as e:
             logger.error(f"Error finding stations: {str(e)}")
             return []
+
+
 
     def post(self, request):
         try:
@@ -117,93 +138,98 @@ class RoutePlannerView(APIView):
             start = serializer.validated_data['start_location']
             end = serializer.validated_data['end_location']
 
-            # Get locations
+            # Geocode locations
             start_location = self.cached_geocode(start)
             end_location = self.cached_geocode(end)
+            
+            if not start_location:
+                return Response({"error": f"Could not find location: {start}"}, status=400)
+            if not end_location:
+                return Response({"error": f"Could not find location: {end}"}, status=400)
 
-            if not start_location or not end_location:
-                return Response(
-                    {"error": "Could not find one or both locations"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Get route data
+            # Get route
             route_data = self.get_osrm_route(
                 start_location.longitude, start_location.latitude,
                 end_location.longitude, end_location.latitude
             )
+            
+            if not route_data:
+                return Response({
+                    "error": "Route calculation failed",
+                    "details": "Could not calculate route between the specified locations"
+                }, status=400)
 
-            if not route_data.get('routes'):
-                return Response(
-                    {"error": "Could not calculate route"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            total_distance = route_data['routes'][0]['distance'] / 1609.34  # Convert to miles
-            total_fuel_needed = total_distance / settings.FUEL_ECONOMY
-            duration = route_data['routes'][0]['duration'] / 60  # Convert to minutes
-
-            # Get all stations along the route
+            # Extract route coordinates and create LineString
             coordinates = route_data['routes'][0]['geometry']['coordinates']
-            route_points = [
-                (coord[1], coord[0]) for coord in coordinates[::len(coordinates)//5]
-            ]  # Sample points along route
+            route_line = LineString([(coord[0], coord[1]) for coord in coordinates])  # (lon, lat)
 
-            all_stations = []
-            for lat, lon in route_points:
-                stations = self.find_nearest_stations(lat, lon)
-                all_stations.extend(stations)
+            # Define search buffer (10 miles)
+            buffer_miles = 10
+            buffer_deg = buffer_miles / 69  # Approximate degrees
 
-            # Remove duplicates and sort by price
-            seen = set()
-            unique_stations = []
-            for station in all_stations:
-                if station['id'] not in seen:
-                    seen.add(station['id'])
-                    unique_stations.append(station)
+            # Calculate expanded bounds for station query
+            min_lon, min_lat, max_lon, max_lat = route_line.bounds
+            expanded_bounds = (
+                max(min_lat - buffer_deg, -90),
+                max(min_lon - buffer_deg, -180),
+                min(max_lat + buffer_deg, 90),
+                min(max_lon + buffer_deg, 180)
+            )
 
-            unique_stations.sort(key=lambda x: (x['retail_price'], x['distance']))
+            # Query stations within expanded bounds
+            stations = FuelStation.objects.filter(
+                latitude__range=(expanded_bounds[0], expanded_bounds[2]),
+                longitude__range=(expanded_bounds[1], expanded_bounds[3]),
+                retail_price__isnull=False
+            ).values('id', 'truck_stop', 'address', 'city', 'state', 
+                    'retail_price', 'latitude', 'longitude')
 
-            # Calculate best fuel price
-            if unique_stations:
-                min_price = min(s['retail_price'] for s in unique_stations)
-                total_cost = total_fuel_needed * min_price
-            else:
-                total_cost = 0
+            # Calculate exact distance from each station to the route
+            valid_stations = []
+            for station in stations:
+                station_point = Point(station['longitude'], station['latitude'])
+                closest_distance = route_line.distance(station_point) * 69  # Approx miles
+
+                if closest_distance <= buffer_miles:
+                    station_data = {
+                        **station,
+                        'route_distance': round(closest_distance, 1),
+                        'retail_price': float(station['retail_price'])
+                    }
+                    valid_stations.append(station_data)
+
+            # Remove duplicates and sort
+            unique_stations = {s['id']: s for s in valid_stations}.values()
+            sorted_stations = sorted(unique_stations, key=lambda x: (x['retail_price'], x['route_distance']))
+
+            # Prepare response data
+            total_distance = route_data['routes'][0]['distance'] / 1609.34  # meters to miles
+            total_fuel = total_distance / settings.FUEL_ECONOMY
+            best_price = min(s['retail_price'] for s in sorted_stations) if sorted_stations else 0
+            total_cost = total_fuel * best_price
 
             response_data = {
                 'start_location': start,
                 'end_location': end,
                 'start_coords': [start_location.latitude, start_location.longitude],
                 'end_coords': [end_location.latitude, end_location.longitude],
-                'total_distance': total_distance,
-                'total_fuel_needed': total_fuel_needed,
-                'total_cost': total_cost,
-                'duration': duration,  # Add duration
+                'total_distance': round(total_distance, 1),
+                'total_fuel_needed': round(total_fuel, 2),
+                'total_cost': round(total_cost, 2),
+                'duration': route_data['routes'][0]['duration'] / 60,  # seconds to minutes
                 'route_geometry': route_data['routes'][0]['geometry'],
-                'stations': unique_stations[:50],  # Return top 50 stations
-                'best_price': min_price if unique_stations else 0
+                'stations': sorted_stations[:50],  # Top 50 by price/distance
+                'best_price': best_price
             }
 
-            # Add session handling
-            try:
-                request.session['last_route'] = {
-                    'start': start,
-                    'end': end,
-                    'timestamp': str(datetime.now())
-                }
-            except UpdateError:
-                # Handle session error silently
-                pass
-                
             return Response(response_data)
 
         except Exception as e:
-            logger.exception("Route calculation error")
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.error(f"Route calculation error: {str(e)}", exc_info=True)
+            return Response({
+                "error": "Internal server error",
+                "details": str(e) if settings.DEBUG else None
+            }, status=500)
 
 @api_view(['GET'])
 def fuel_stations(request):
