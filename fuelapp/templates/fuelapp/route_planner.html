@@ -86,6 +86,20 @@
             color: #666;
             font-size: 0.9em;
         }
+        .custom-icon {
+            width: 32px;
+            height: 32px;
+        }
+        .time-info {
+            background: #e3f2fd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .eta {
+            color: #1976d2;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -111,6 +125,36 @@
         let endMarker;
         let markerCluster;
 
+        // Custom icons
+        const truckIcon = L.icon({
+            iconUrl: '/static/fuelapp/images/truck.svg',
+            iconSize: [36, 36],
+            iconAnchor: [18, 36],
+            popupAnchor: [0, -36]
+        });
+
+        const stationIcon = L.icon({
+            iconUrl: '/static/fuelapp/images/gas-station.png',
+            iconSize: [28, 28],
+            iconAnchor: [14, 28],
+            popupAnchor: [0, -28],
+            shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+            shadowSize: [41, 41],
+            shadowAnchor: [14, 41]
+        });
+
+        function formatTime(minutes) {
+            const hours = Math.floor(minutes / 60);
+            const mins = Math.round(minutes % 60);
+            return `${hours} hours ${mins} minutes`;
+        }
+
+        function calculateETA(duration) {
+            const now = new Date();
+            const arrival = new Date(now.getTime() + duration * 60000);
+            return arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
         function initMap() {
             map = L.map('map').setView([39.8283, -98.5795], 4);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -129,6 +173,7 @@
                 
                 stations.forEach(station => {
                     const marker = L.marker([station.latitude, station.longitude], {
+                        icon: stationIcon,
                         title: station.truck_stop
                     });
                     
@@ -196,13 +241,13 @@
                 if (endMarker) map.removeLayer(endMarker);
 
                 // Add markers
-                startMarker = L.marker(data.start_coords)
-                    .bindPopup(`Start: ${data.start_location}`)
-                    .addTo(map);
+                startMarker = L.marker(data.start_coords, {
+                    icon: truckIcon
+                }).bindPopup(`Start: ${data.start_location}`).addTo(map);
                 
-                endMarker = L.marker(data.end_coords)
-                    .bindPopup(`End: ${data.end_location}`)
-                    .addTo(map);
+                endMarker = L.marker(data.end_coords, {
+                    icon: truckIcon
+                }).bindPopup(`End: ${data.end_location}`).addTo(map);
 
                 // Draw route
                 routeLayer = L.geoJSON(data.route_geometry, {
@@ -213,6 +258,10 @@
                 document.getElementById('route-info').innerHTML = `
                     <h3>Route Information</h3>
                     <p><strong>Distance:</strong> ${Math.round(data.total_distance)} miles</p>
+                    <div class="time-info">
+                        <p><strong>Estimated Travel Time:</strong> ${formatTime(data.duration)}</p>
+                        <p><strong>ETA:</strong> <span class="eta">${calculateETA(data.duration)}</span></p>
+                    </div>
                     <p><strong>Fuel Needed:</strong> ${data.total_fuel_needed.toFixed(2)} gallons</p>
                     <p><strong>Best Available Price:</strong> $${data.best_price.toFixed(3)}/gallon</p>
                     <p><strong>Estimated Total Cost:</strong> $${data.total_cost.toFixed(2)}</p>

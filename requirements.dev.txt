@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Development packages
+django-debug-toolbar==4.2.0
+ipython==8.12.3 

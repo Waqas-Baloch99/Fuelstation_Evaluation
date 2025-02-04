@@ -1,0 +1,31 @@
+# Django and REST framework
+Django==3.2.23
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+
+# Gunicorn for deployment
+gunicorn==21.2.0
+
+# Geolocation and mapping
+geopy==2.4.1
+polyline==2.0.1
+
+# Data handling
+pandas==2.0.3
+numpy==1.24.3
+
+# HTTP requests
+requests==2.31.0
+
+# Database
+sqlparse==0.4.4
+
+# Cache
+python-memcached==1.59
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Production dependencies
+whitenoise==6.5.0  # for serving static files
+psycopg2-binary==2.9.9  # for PostgreSQL support 

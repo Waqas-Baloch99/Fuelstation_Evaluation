@@ -6,7 +6,12 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'fuel_supply.settings')
+    # Force development settings
+    os.environ['DJANGO_SETTINGS_MODULE'] = 'fuel_supply.settings_dev'
+    # Force HTTP
+    os.environ['PYTHONHTTPSVERIFY'] = '0'
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

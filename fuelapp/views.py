@@ -22,6 +22,8 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from concurrent.futures import ThreadPoolExecutor
 from django.core.cache import cache
+from django.contrib.sessions.backends.base import UpdateError
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 CACHE_TIMEOUT = 86400  # 24 hours
@@ -137,8 +139,9 @@ class RoutePlannerView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            total_distance = route_data['routes'][0]['distance'] / 1609.34
+            total_distance = route_data['routes'][0]['distance'] / 1609.34  # Convert to miles
             total_fuel_needed = total_distance / settings.FUEL_ECONOMY
+            duration = route_data['routes'][0]['duration'] / 60  # Convert to minutes
 
             # Get all stations along the route
             coordinates = route_data['routes'][0]['geometry']['coordinates']
@@ -176,11 +179,23 @@ class RoutePlannerView(APIView):
                 'total_distance': total_distance,
                 'total_fuel_needed': total_fuel_needed,
                 'total_cost': total_cost,
+                'duration': duration,  # Add duration
                 'route_geometry': route_data['routes'][0]['geometry'],
                 'stations': unique_stations[:50],  # Return top 50 stations
                 'best_price': min_price if unique_stations else 0
             }
 
+            # Add session handling
+            try:
+                request.session['last_route'] = {
+                    'start': start,
+                    'end': end,
+                    'timestamp': str(datetime.now())
+                }
+            except UpdateError:
+                # Handle session error silently
+                pass
+                
             return Response(response_data)
 
         except Exception as e:
