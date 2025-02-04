@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Django and REST framework
 Django==3.2.23
 djangorestframework==3.14.0
@@ -22,10 +23,31 @@ sqlparse==0.4.4
 
 # Cache
 python-memcached==1.59
+=======
+# Core
+Django==3.2.23
+
+# REST Framework
+djangorestframework==3.14.0
+
+# CORS Headers
+django-cors-headers==4.2.0
+
+# Database (SQLite is default; add PostgreSQL if needed)
+psycopg2-binary==2.9.9  # Optional for PostgreSQL
+
+# Image handling (if you use ImageField in models)
+Pillow==10.1.0
+>>>>>>> a95c29d1a2088558ab7bb2070d7433065a2c4749
 
 # Environment variables
 python-dotenv==1.0.0
 
+<<<<<<< HEAD
 # Production dependencies
 whitenoise==6.5.0  # for serving static files
 psycopg2-binary==2.9.9  # for PostgreSQL support 
+=======
+# API Documentation (optional)
+drf-yasg==1.21.7  # If you want Swagger/OpenAPI docs
+>>>>>>> a95c29d1a2088558ab7bb2070d7433065a2c4749
