@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+    {% load static %}
 <head>
     <title>Fuel Route Planner</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -119,28 +120,28 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
     <script>
+        
         let map;
         let routeLayer;
         let startMarker;
         let endMarker;
         let markerCluster;
+        let currentStationMarkers = [];
 
         // Custom icons
         const truckIcon = L.icon({
-            iconUrl: '/static/fuelapp/images/truck.svg',
+            iconUrl: "{% static 'fuelapp/images/truck.svg' %}",
             iconSize: [36, 36],
             iconAnchor: [18, 36],
             popupAnchor: [0, -36]
         });
 
         const stationIcon = L.icon({
-            iconUrl: '/static/fuelapp/images/gas-station.png',
-            iconSize: [28, 28],
-            iconAnchor: [14, 28],
-            popupAnchor: [0, -28],
-            shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-            shadowSize: [41, 41],
-            shadowAnchor: [14, 41]
+            iconUrl: "{% static 'fuelapp/images/gas-station.png' %}",
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -32],
+            className: 'custom-icon'
         });
 
         function formatTime(minutes) {
@@ -162,50 +163,66 @@
                 maxZoom: 19
             }).addTo(map);
             
-            markerCluster = L.markerClusterGroup();
-            loadFuelStations();
+            // Initialize marker cluster group
+            markerCluster = L.markerClusterGroup({
+                maxClusterRadius: 50,
+                spiderfyOnMaxZoom: true,
+                showCoverageOnHover: false,
+                zoomToBoundsOnClick: true
+            });
+            map.addLayer(markerCluster);
         }
 
-        async function loadFuelStations() {
+        async function loadRouteStations(routeBounds) {
+            clearStationMarkers();
             try {
-                const response = await fetch('/api/fuel-stations/');
+                const response = await fetch(`/api/fuel-stations/?bounds=${JSON.stringify(routeBounds)}`);
                 const stations = await response.json();
                 
+                if (!stations || stations.length === 0) {
+                    console.log('No stations found');
+                    return;
+                }
+
                 stations.forEach(station => {
+                    if (!station.latitude || !station.longitude) {
+                        console.log('Invalid station coordinates:', station);
+                        return;
+                    }
+
                     const marker = L.marker([station.latitude, station.longitude], {
-                        icon: stationIcon,
-                        title: station.truck_stop
+                        icon: stationIcon
                     });
                     
                     marker.bindPopup(`
-                        <b>${station.truck_stop}</b><br>
-                        ${station.address}<br>
-                        ${station.city}, ${station.state}<br>
-                        <b>Price: $${station.retail_price.toFixed(3)}/gallon</b>
+                        <div class="station-popup">
+                            <h3>${station.truck_stop}</h3>
+                            <p>${station.address}<br>${station.city}, ${station.state}</p>
+                            <p class="price">$${station.retail_price.toFixed(3)}/gallon</p>
+                            <p>Distance from route: ${station.route_distance?.toFixed(1) || 'N/A'} miles</p>
+                        </div>
                     `);
                     
+                    currentStationMarkers.push(marker);
                     markerCluster.addLayer(marker);
                 });
-                
-                map.addLayer(markerCluster);
+
+                // Make sure the marker cluster is added to the map
+                if (!map.hasLayer(markerCluster)) {
+                    map.addLayer(markerCluster);
+                }
+
+                console.log(`Added ${stations.length} station markers`);
             } catch (error) {
                 console.error('Error loading fuel stations:', error);
             }
         }
 
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
+        function clearStationMarkers() {
+            if (markerCluster) {
+                markerCluster.clearLayers();
             }
-            return cookieValue;
+            currentStationMarkers = [];
         }
 
         async function calculateRoute() {
@@ -239,6 +256,7 @@
                 if (routeLayer) map.removeLayer(routeLayer);
                 if (startMarker) map.removeLayer(startMarker);
                 if (endMarker) map.removeLayer(endMarker);
+                clearStationMarkers();
 
                 // Add markers
                 startMarker = L.marker(data.start_coords, {
@@ -267,8 +285,19 @@
                     <p><strong>Estimated Total Cost:</strong> $${data.total_cost.toFixed(2)}</p>
                 `;
 
+                // After route is drawn, load stations along route
+                const routeBounds = routeLayer.getBounds();
+                await loadRouteStations({
+                    north: routeBounds.getNorth(),
+                    south: routeBounds.getSouth(),
+                    east: routeBounds.getEast(),
+                    west: routeBounds.getWest(),
+                    buffer: 10 // 10 mile buffer around route
+                });
+
+                // Update station info with route-specific details
                 document.getElementById('station-info').innerHTML = `
-                    <h3>Available Fuel Stations</h3>
+                    <h3>Stations Along Route</h3>
                     ${renderStationList(data.stations)}
                 `;
 
@@ -284,26 +313,46 @@
 
         function renderStationList(stations) {
             if (!stations || stations.length === 0) {
-                return '<p>No stations found in this area</p>';
+                return '<p>No stations found along this route</p>';
             }
 
             return `
                 <div class="station-summary">
-                    <p><strong>Found ${stations.length} stations</strong></p>
+                    <p><strong>Found ${stations.length} stations along route</strong></p>
                     <p><strong>Best price:</strong> $${stations[0].retail_price.toFixed(3)}/gallon</p>
                 </div>
                 <div class="station-list">
                     ${stations.map(station => `
                         <div class="station-item">
-                            <strong>${station.truck_stop}</strong><br>
-                            ${station.address}<br>
-                            ${station.city}, ${station.state}<br>
+                            <strong>${station.truck_stop}</strong>
                             <span class="price">$${station.retail_price.toFixed(3)}/gallon</span>
-                            <span class="distance">(${station.distance.toFixed(1)} miles away)</span>
+                            <div class="station-details">
+                                <p>${station.address}<br>${station.city}, ${station.state}</p>
+                                <span class="distance">
+                                    ${station.route_distance ? 
+                                    `${station.route_distance.toFixed(1)} miles from route` :
+                                    'Distance unknown'}
+                                </span>
+                            </div>
                         </div>
                     `).join('')}
                 </div>
             `;
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
         }
 
         window.onload = initMap;
