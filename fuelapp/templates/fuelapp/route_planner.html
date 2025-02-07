@@ -126,6 +126,7 @@
         let endMarker;
         let markerCluster;
         let currentStationMarkers = [];
+        let stationPathLayer;  // New layer for station path
 
         const truckIcon = L.icon({
             iconUrl: "{% static 'fuelapp/images/truck.svg' %}",
@@ -170,6 +171,41 @@
             map.addLayer(markerCluster);
         }
 
+        async function navigateToStation(stationLat, stationLng) {
+            if (stationPathLayer) {
+                map.removeLayer(stationPathLayer);
+            }
+
+            try {
+                const response = await fetch('/api/station-route/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({
+                        start_coords: [startMarker.getLatLng().lat, startMarker.getLatLng().lng],
+                        station_coords: [stationLat, stationLng]
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Station route calculation failed');
+                }
+
+                stationPathLayer = L.geoJSON(data.route_geometry, {
+                    style: {color: '#1976d2', weight: 3, dashArray: '5, 10'}
+                }).addTo(map);
+
+                map.fitBounds(stationPathLayer.getBounds().pad(0.1));
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert(error.message || 'Could not calculate route to station');
+            }
+        }
+
         async function loadRouteStations(routeBounds) {
             clearStationMarkers();
             try {
@@ -207,6 +243,9 @@
                             <p>${station.address}<br>${station.city}, ${station.state}</p>
                             <p class="price">$${station.retail_price.toFixed(3)}/gallon</p>
                             <p>${distanceText}</p>
+                            <button onclick="navigateToStation(${station.latitude}, ${station.longitude})">
+                                Navigate to Station
+                            </button>
                         </div>
                     `);
 
@@ -227,6 +266,9 @@
         function clearStationMarkers() {
             if (markerCluster) {
                 markerCluster.clearLayers();
+            }
+            if (stationPathLayer) {
+                map.removeLayer(stationPathLayer);
             }
             currentStationMarkers = [];
         }

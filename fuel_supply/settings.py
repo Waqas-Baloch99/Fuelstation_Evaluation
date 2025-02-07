@@ -185,3 +185,6 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Add whitenoise settings
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# OSRM Server Configuration
+OSRM_SERVER = "http://router.project-osrm.org"

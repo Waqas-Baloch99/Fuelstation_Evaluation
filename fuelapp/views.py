@@ -5,30 +5,25 @@ from rest_framework.decorators import api_view
 from rest_framework import status
 from django.views.generic import TemplateView
 from django.core.cache import cache
-from django.db.models import F
 from rest_framework.pagination import PageNumberPagination
 import requests
-from .models import FuelStation, Route, FuelStop
-from .serializers import RouteSerializer, RouteRequestSerializer, FuelStationSerializer
+from .models import FuelStation
+from .serializers import  RouteRequestSerializer
 from django.conf import settings
-from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
 import logging
-import time
-import math
-import polyline
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils.decorators import method_decorator
-from concurrent.futures import ThreadPoolExecutor
 from django.core.cache import cache
 from django.contrib.sessions.backends.base import UpdateError
 from shapely.geometry import LineString, Point
-from geopy.distance import geodesic
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+CACHE_TIMEOUT = 300  # 5 minutes cache timeout, adjust as needed
 
 logger = logging.getLogger(__name__)
-CACHE_TIMEOUT = 86400  # 24 hours
-
-@method_decorator(ensure_csrf_cookie, name='dispatch')
 class RoutePlannerTemplateView(TemplateView):
     template_name = 'fuelapp/route_planner.html'
 
@@ -301,3 +296,52 @@ def fuel_stations(request):
             {"error": "Could not fetch fuel stations"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+@csrf_exempt
+def calculate_station_route(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        start_coords = data.get('start_coords')
+        station_coords = data.get('station_coords')
+
+        if not start_coords or not station_coords:
+            return JsonResponse({'error': 'Missing coordinates'}, status=400)
+
+        # Convert coordinates to string format required by OSRM
+        start_str = f"{start_coords[1]},{start_coords[0]}"
+        station_str = f"{station_coords[1]},{station_coords[0]}"
+
+        # Call OSRM service for route
+        osrm_url = f"{settings.OSRM_SERVER}/route/v1/driving/{start_str};{station_str}"
+        params = {
+            'overview': 'full',
+            'geometries': 'geojson',
+            'steps': 'true'
+        }
+        
+        response = requests.get(osrm_url, params=params)
+        route_data = response.json()
+
+        if response.status_code != 200:
+            return JsonResponse({'error': 'Route calculation failed'}, status=500)
+
+        return JsonResponse({
+            'route_geometry': route_data['routes'][0]['geometry'],
+            'distance': route_data['routes'][0]['distance'],
+            'duration': route_data['routes'][0]['duration']
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+def your_view_function(request):  # replace with actual function name
+    try:
+        # your code here
+        pass
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

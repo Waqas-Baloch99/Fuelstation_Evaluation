@@ -8,7 +8,6 @@ import os
 class Command(BaseCommand):
     help = 'Import fuel prices from CSV file'
     
-    # State coordinates (center points)
     STATE_CENTROIDS = {
         'AL': (32.806671, -86.791130),
         'AK': (61.370716, -152.404419),
@@ -63,7 +62,6 @@ class Command(BaseCommand):
     }
 
     def get_state_coordinates(self, state):
-        """Get coordinates with some random variation around state center"""
         state = state.upper().strip()
         base_lat, base_lon = self.STATE_CENTROIDS.get(state, (37.0902, -95.7129))
         return {
@@ -75,42 +73,34 @@ class Command(BaseCommand):
         try:
             self.stdout.write("Starting fuel station import...")
             
-            # Clear existing data
             FuelStation.objects.all().delete()
             
-            # Get absolute path to CSV file
             csv_file = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
                 'fuel-prices-for-be-assessment.csv'
             )
             
-            # Verify file exists
             if not os.path.exists(csv_file):
                 raise FileNotFoundError(f"CSV file not found at: {csv_file}")
                 
             self.stdout.write(f"Reading CSV file from: {csv_file}")
             df = pd.read_csv(csv_file)
             
-            # Randomly sample 1000 stations
             df = df.sample(n=min(8000, len(df)), random_state=42)
             
-            # Print import statistics
             self.stdout.write(f"Total rows to import: {len(df)}")
             for state in df['State'].unique():
                 count = len(df[df['State'] == state])
                 self.stdout.write(f"Stations in {state}: {count}")
             
-            # Process stations in batches
             batch_size = 100
             stations = []
             
             for index, row in df.iterrows():
                 try:
-                    # Get coordinates for the state
                     state = str(row['State']).strip().upper()[:2]
                     coords = self.get_state_coordinates(state)
                     
-                    # Create station object
                     station = FuelStation(
                         opis=str(row['OPIS Truckstop ID']),
                         truck_stop=str(row['Truckstop Name']),
@@ -124,7 +114,6 @@ class Command(BaseCommand):
                     )
                     stations.append(station)
                     
-                    # Bulk create when batch is full
                     if len(stations) >= batch_size:
                         FuelStation.objects.bulk_create(stations)
                         self.stdout.write(f"Imported {batch_size} stations...")
@@ -136,17 +125,14 @@ class Command(BaseCommand):
                     )
                     continue
             
-            # Create remaining stations
             if stations:
                 FuelStation.objects.bulk_create(stations)
             
-            # Print final statistics
             total_stations = FuelStation.objects.count()
             self.stdout.write(
                 self.style.SUCCESS(f"Successfully imported {total_stations} fuel stations")
             )
             
-            # Print price statistics
             avg_price = FuelStation.objects.filter(retail_price__isnull=False).values_list('retail_price', flat=True).aggregate(Avg('retail_price'))
             min_price = FuelStation.objects.filter(retail_price__isnull=False).values_list('retail_price', flat=True).aggregate(Min('retail_price'))
             max_price = FuelStation.objects.filter(retail_price__isnull=False).values_list('retail_price', flat=True).aggregate(Max('retail_price'))
