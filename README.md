@@ -8,7 +8,7 @@ A web application that calculates optimal fuel stops for long-distance journeys 
 
 **Repository**: [github.com/Waqas-Baloch99/Fuelstation_Evaluation](https://github.com/Waqas-Baloch99/Fuelstation_Evaluation)
 
-![Fuel Station Route Planner Screenshot](https://github.com/Waqas-Baloch99/Fuelstation_Evaluation/blob/master/Screenshot 2025-02-07 231147.png)
+![Fuel Station Route Planner Screenshot](https://github.com/Waqas-Baloch99/Fuelstation_Evaluation/blob/master/Screenshot%202025-02-07%20231147.png)
 
 ## Features ✨
 
